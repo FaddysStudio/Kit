@@ -17,10 +17,9 @@ roll browser.rs [ ... options ] <DIRECTORY>
 
 +==
 import Scenarist from '@faddys/scenarist';
-import { createInterface } from 'node:readline';
-import { stdin as input } from 'node:process';
+import command from '@faddys/command';
 
-await Scenarist ( new class {
+await Scenarist ( new class Browser {
 
 $_producer ( $ ) {
 
@@ -28,28 +27,21 @@ $ ( ... process .argv .slice ( 2 ) );
 
 }
 
-$mimeTypes ( $, directory ) {
+async $_director ( $, directory ) {
 
-console .log ( `file --mime-type ${ directory }/*` );
+const contents = await command ( 'file', '--mime-type', directory + '/*' )
+.then ( $ => $ ( Symbol .for ( 'output' ) ) );
 
-}
-
-$audioFiles () {
-
-createInterface ( { input } )
-.on ( 'line', line => {
-
-const [ file, type ] = line .split ( /\s+/ );
-
-if ( type .startsWith ( 'audio' ) )
-console .log ( file .slice ( 0, -1 ) );
-
-} );
+contents .map ( line => line .split ( /\s+/ ) )
+.filter ( ( [ file, type ] ) => type .startsWith ( 'audio' ) )
+.forEach ( ( [ file ] ) => console .log ( file .slice ( 0, -1 ) ) );
 
 }
 
 } );
 -==
 
-?# $ node .FaddysKit/browser.mjs mimeTypes > .FaddysKit/browser.sh
-?# bash .FaddysKit/browser.sh | node .FaddysKit/browser.mjs audioFiles
+?# $ node .FaddysKit/browser.mjs
+
+/?# $ node .FaddysKit/browser.mjs mimeTypes > .FaddysKit/browser.sh
+/?# bash .FaddysKit/browser.sh | node .FaddysKit/browser.mjs audioFiles

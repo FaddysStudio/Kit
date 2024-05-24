@@ -5,7 +5,7 @@
 ## Syntax
 
 ```bash
-roll machine.rs
+roll machine.rs [ <STEP_NUMBER>/<SAMPLE_KIT> ]...
 ```
 
 ?# cat - > .FaddysKit/machine.mjs
