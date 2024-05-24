@@ -26,7 +26,9 @@ Create a hidden directory to act as a scratch for the roll.
 
 ?# mkdir -p ._
 
-## Csound Orchestra Index
+### Csound Engine
+
+#### Csound Orchestra Index
 
 ?# cat - > ._/index.orc
 
@@ -37,13 +39,47 @@ ksmps = 48
 nchnls = 2
 0dbfs = 1
 
+#include "kit.orc"
 #include "recorder.orc"
 #include "rhythm.orc"
 #include "beat.orc"
 
 -==
 
-## Csound Recorder Instrument
+#### Csound Kit Instrument
+
+?# cat - > ._/kit.orc
+
++==
+
+instr kit
+
+SKit strget p4
+
+iKit pcount
+iKit -= 4
+
+SSize sprintf "%s/size", SKit
+chnset iKit, SSize
+
+iIndex init 0
+
+while iIndex < iKit do
+
+SIndex sprintf "%s/%d", SKit, iIndex
+SPath strget p ( iIndex + 5 )
+
+chnset SPath, SIndex
+
+iIndex += 1
+
+od
+
+endin
+
+-==
+
+### Csound Recorder Instrument
 
 ?# cat - > ._/recorder.orc
 
@@ -67,8 +103,6 @@ endin
 This instrument plays one of the beats passed as string p-fields once per cycle.
 A cycle is the absolute value of p3.
 
-### Syntax for Scoring Rhythms
-
 ```csound
 i "rhythm" $delay $cycle "$beat1" ... "$beatN"
 ```
@@ -91,34 +125,16 @@ iBeat nstrnum "beat"
 iCycle init abs ( p3 )
 kRhythm metro 1 / iCycle
 
-kSwing jspline .5, 0, 4
-kSwing += .5
+kSwing jspline 1, 0, 4
+kSwing = abs ( kSwing ) * 127
 
-iKit pcount
-iKit -= 3
-SKit [] init iKit
+if kRhythm == 1 && kSwing > p5 then
 
-iBeat init 0
+SKit strget p4
 
-while iBeat < iKit do
-
-SKit [ iBeat ] strget p ( iBeat + 4 )
-
-od
-
-if kRhythm == 1 then
-
-kBeat = int ( iKit * kSwing * 1.25 )
-
-if kBeat < iKit then
-
-SBeat = SKit [ kBeat ]
-
-SNote sprintfk {{ i %f 0 1 "%s" }}, iBeat + iInstance, SBeat
+SNote sprintfk {{ i %f 0 1 "%s" }}, iBeat + iInstance, SKit
 
 scoreline SNote, 1
-
-endif
 
 endif
 
@@ -126,19 +142,42 @@ endin
 
 -==
 
+#### Csound Beat Player Instrument
+
 ?# cat - > ._/beat.orc
 
 +==
 
 instr beat
 
-SRhythm strget p4
+SKit strget p4
+SSize sprintf "%s/size", SKit
+iKit chnget SSize
+
+iIndex random 0, iKit
+SIndex sprintf "%s/%d", SKit, iIndex
+
+SRhythm chnget SIndex
 
 p3 filelen SRhythm
 
 kPitch jspline 1, 0, 4
 
-aLeft, aRight diskin2 SRhythm, cent ( kPitch * 10 )
+aRhythm [] diskin2 SRhythm, cent ( kPitch * 10 )
+
+iChannels lenarray aRhythm
+
+if iChannels == 1 then
+
+aLeft = aRhythm [ 0 ]
+aRight = aRhythm [ 0 ]
+
+else
+
+aLeft = aRhythm [ 0 ]
+aRight = aRhythm [ 1 ]
+
+endif	
 
 kAmplitude jspline .1, 0, 4
 kAmplitude += .1
@@ -147,18 +186,113 @@ kAmplitude = 1 - kAmplitude
 aLeft clip aLeft * kAmplitude, 1, 1
 aRight clip aRight * kAmplitude, 1, 1
 
-outs aLeft/10, aRight/10
+outs aLeft, aRight
 
 endin
 
 -==
 
-?# cat - > ._/index.sco
+#### Node.js Rhythm Scorer ES Module
+
+?# cat - > ._/rhythm.mjs
 
 +==
 
-i "rhythm" 0 1 "rhythm2_90.wav"
+import Scenarist from '@faddys/scenarist';
+import $0 from '@faddys/command';
+
+await Scenarist ( new class Rhythm {
+
+sequence = []
+tempo = 105
+length = 4
+measure = 8
+
+constructor () {
+
+Object .keys ( this )
+.filter ( key => typeof this [ key ] === 'number' )
+.forEach ( key => Object .defineProperty ( this, '$' + key, {
+
+value ( $, value, ... argv ) {
+
+this [ key ] = parseFloat ( value ) || this [ key ];
+
+return $ ( ... argv );
+
+}
+
+} ) );
+
+}
+
+async $_producer ( $ ) {
+
+await $ ( ... process .argv .slice ( 2 ) );
+
+const rhythm = this;
+
+console .log ( `
+
+${ Object .values ( rhythm .kit ) .join ( '\n' ) }
+
+t 0 ${ rhythm .tempo }
+v ${ rhythm .length }
+
+${ rhythm .sequence .join ( '\n' ) }
+
+e 60
+
+` .trim () );
+
+}
+
+async $_director ( $, ... argv ) {
+
+if ( ! argv .length )
+return;
+
+const rhythm = this;
+const [ step, kit ] = argv .shift () .split ( '/' );
+
+rhythm .sequence .push ( [
+
+'i "rhythm"',
+`[${ step }/${ rhythm .measure }]`,
+-1,
+`"${ kit }"`
+
+] .join ( ' ' ) );
+
+await rhythm .prepare ( kit )
+
+await $ ( ... argv );
+
+}
+
+kit = {};
+
+async prepare ( kit ) {
+
+const rhythm = this;
+
+if ( rhythm .kit [ kit ] )
+return;
+
+const contents = await $0 ( 'file', '--mime-type', kit + '/*' )
+.then ( $ => $ ( Symbol .for ( 'output' ) ) );
+
+rhythm .kit [ kit ] = `i "kit" 0 0 "${ kit }" ${ contents .map ( line => line .split ( /\s+/ ) )
+.filter ( ( [ file, type ] ) => type .startsWith ( 'audio' ) )
+.map ( ( [ file ] ) => `"../${ file .slice ( 0, -1 ) }"` )
+.join ( ' ' ) }`;
+
+}
+
+} );
 
 -==
+
+?# $ node ._/rhythm.mjs > ._/index.sco
 
 ?# cd ._ ; csound -odac index.* -b 384 -B 1024
