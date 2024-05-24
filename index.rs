@@ -56,24 +56,14 @@ instr kit
 
 SKit strget p4
 
-iKit pcount
-iKit -= 4
-
 SSize sprintf "%s/size", SKit
-chnset iKit, SSize
+iSize chnget SSize
 
-iIndex init 0
-
-while iIndex < iKit do
-
-SIndex sprintf "%s/%d", SKit, iIndex
-SPath strget p ( iIndex + 5 )
+SIndex sprintf "%s/%d", SKit, iSize
+SPath strget p5
 
 chnset SPath, SIndex
-
-iIndex += 1
-
-od
+chnset iSize + 1, SSize
 
 endin
 
@@ -282,10 +272,10 @@ return;
 const contents = await $0 ( 'file', '--mime-type', kit + '/*' )
 .then ( $ => $ ( Symbol .for ( 'output' ) ) );
 
-rhythm .kit [ kit ] = `i "kit" 0 0 "${ kit }" ${ contents .map ( line => line .split ( /\s+/ ) )
+rhythm .kit [ kit ] = contents .map ( line => line .split ( /\s+/ ) )
 .filter ( ( [ file, type ] ) => type .startsWith ( 'audio' ) )
-.map ( ( [ file ] ) => `"../${ file .slice ( 0, -1 ) }"` )
-.join ( ' ' ) }`;
+.map ( ( [ file ] ) => `i "kit" 0 0 "${ kit }" "../${ file .slice ( 0, -1 ) }"` )
+.join ( '\n' );
 
 }
 
