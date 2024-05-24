@@ -144,7 +144,7 @@ SKit strget p4
 SSize sprintf "%s/size", SKit
 iKit chnget SSize
 
-iIndex random 0, iKit
+iIndex random 0, iKit - 1
 SIndex sprintf "%s/%d", SKit, iIndex
 
 SRhythm chnget SIndex
