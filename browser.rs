@@ -34,14 +34,15 @@ const contents = await command ( 'file', '--mime-type', directory + '/*' )
 
 contents .map ( line => line .split ( /\s+/ ) )
 .filter ( ( [ file, type ] ) => type .startsWith ( 'audio' ) )
-.forEach ( ( [ file ] ) => console .log ( file .slice ( 0, -1 ) ) );
+.forEach ( ( [ file ] ) => console .log ( 'aplay', file .slice ( 0, -1 ) ) );
 
 }
 
 } );
 -==
 
-?# $ node .FaddysKit/browser.mjs
+?# $ node .FaddysKit/browser.mjs > .FaddysKit/response.sh
+?# -1 -2 bash .FaddysKit/response.sh
 
 /?# $ node .FaddysKit/browser.mjs mimeTypes > .FaddysKit/browser.sh
 /?# bash .FaddysKit/browser.sh | node .FaddysKit/browser.mjs audioFiles

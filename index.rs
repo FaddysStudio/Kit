@@ -218,7 +218,13 @@ return $ ( ... argv );
 
 async $_producer ( $ ) {
 
-await $ ( ... process .argv .slice ( 2 ) );
+const file = process .argv .slice ( 2 ) .pop ();
+const notation = await $0 ( 'cat', file )
+.then ( $ => $ ( Symbol .for ( 'output' ) ) );
+
+for ( let line of notation )
+if ( ( line = line .trim () ) .length )
+await $ ( ... line .trim () .split ( /\s+/ ) );
 
 const rhythm = this;
 
@@ -231,7 +237,7 @@ v ${ rhythm .length }
 
 ${ rhythm .sequence .join ( '\n' ) }
 
-e 60
+e ${ 60*60*24 }
 
 ` .trim () );
 
@@ -243,14 +249,15 @@ if ( ! argv .length )
 return;
 
 const rhythm = this;
-const [ step, kit ] = argv .shift () .split ( '/' );
+const [ step, kit, swing ] = argv .shift () .split ( '/' );
 
 rhythm .sequence .push ( [
 
 'i "rhythm"',
 `[${ step }/${ rhythm .measure }]`,
 -1,
-`"${ kit }"`
+`"${ kit }"`,
+parseFloat ( swing ) || 0
 
 ] .join ( ' ' ) );
 
@@ -285,4 +292,4 @@ rhythm .kit [ kit ] = contents .map ( line => line .split ( /\s+/ ) )
 
 ?# $ node ._/rhythm.mjs > ._/index.sco
 
-?# cd ._ ; csound -odac index.* -b 384 -B 1024
+?# -1 -2 cd ._ ; csound -odac index.* -b 384 -B 1024
