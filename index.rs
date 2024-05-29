@@ -24,46 +24,56 @@ roll index.rs <step>...
 
 Create a hidden directory to act as a scratch for the roll.
 
-?# mkdir -p ._
+?# mkdir -p .FaddysKit
 
 ### Csound Engine
 
 #### Csound Orchestra Index
 
-?# cat - > ._/index.orc
+?# cat - > .FaddysKit/index.orc
 
 +==
 
-sr = 48000
-ksmps = 48
+sr = 44100
+ksmps = 32
 nchnls = 2
 0dbfs = 1
 
 #include "kit.orc"
-#include "recorder.orc"
 #include "rhythm.orc"
 #include "beat.orc"
+#include "recorder.orc"
+#include "out.orc"
+#include "loop.orc"
 
 -==
 
 #### Csound Kit Instrument
 
-?# cat - > ._/kit.orc
+?# cat - > .FaddysKit/kit.orc
 
 +==
 
 instr kit
 
 SKit strget p4
+SPath strget p5
+
+iReady chnget SPath
+
+if iReady == 0 then
 
 SSize sprintf "%s/size", SKit
 iSize chnget SSize
 
 SIndex sprintf "%s/%d", SKit, iSize
-SPath strget p5
 
 chnset SPath, SIndex
 chnset iSize + 1, SSize
+
+chnset 1, SPath
+
+endif
 
 endin
 
@@ -71,18 +81,33 @@ endin
 
 ### Csound Recorder Instrument
 
-?# cat - > ._/recorder.orc
+?# cat - > .FaddysKit/recorder.orc
 
 +==
 
 instr recorder
 
-aLeft, aRight ins
+aInputLeft, aInputRight ins
 
-iTimeStamp date
-SRecording sprintf "._/recording_%d.wav", iTimeStamp
+STitle strget p4
 
-fout SRecording, -1, aLeft, aRight
+SInput sprintf "%s_input.wav", STitle
+
+fout SInput, -1, aInputLeft, aInputRight
+
+aRhythmLeft chnget "left"
+aRhythmRight chnget "right"
+
+SNote sprintf "%s_rhythm.wav", STitle
+
+fout SNote, -1, aRhythmLeft, aRhythmRight
+
+SMix sprintf "%s.wav", STitle
+
+aLeft clip aInputLeft + aRhythmLeft, 1, 1
+aRight clip aInputRight + aRhythmRight, 1, 1
+
+fout SMix, -1, aLeft, aRight
 
 endin
 
@@ -97,11 +122,15 @@ A cycle is the absolute value of p3.
 i "rhythm" $delay $cycle "$beat1" ... "$beatN"
 ```
 
-?# cat - > ._/rhythm.orc
+?# cat - > .FaddysKit/rhythm.orc
 
 +==
 
 instr rhythm
+
+iSwing random 0, 127
+
+if iSwing > p5 then
 
 iInstance chnget "instance"
 iInstance += 1
@@ -112,19 +141,19 @@ p1 init int ( p1 ) + iInstance
 
 iBeat nstrnum "beat"
 
-iCycle init abs ( p3 )
-kRhythm metro 1 / iCycle
-
-kSwing jspline 1, 0, 4
-kSwing = abs ( kSwing ) * 127
-
-if kRhythm == 1 && kSwing > p5 then
-
 SKit strget p4
+SKit strget p4
+SSize sprintf "%s/size", SKit
+iKit chnget SSize
 
-SNote sprintfk {{ i %f 0 1 "%s" }}, iBeat + iInstance, SKit
+iIndex random 0, iKit - 1
+SIndex sprintf "%s/%d", SKit, iIndex
 
-scoreline SNote, 1
+SNote chnget SIndex
+
+SBeat sprintf {{ i %f 0 1 "%s" }}, iBeat + iInstance, SNote
+
+scoreline_i SBeat
 
 endif
 
@@ -134,26 +163,19 @@ endin
 
 #### Csound Beat Player Instrument
 
-?# cat - > ._/beat.orc
+?# cat - > .FaddysKit/beat.orc
 
 +==
 
 instr beat
 
-SKit strget p4
-SSize sprintf "%s/size", SKit
-iKit chnget SSize
+SNote strget p4
 
-iIndex random 0, iKit - 1
-SIndex sprintf "%s/%d", SKit, iIndex
-
-SRhythm chnget SIndex
-
-p3 filelen SRhythm
+p3 filelen SNote
 
 kPitch jspline 1, 0, 4
 
-aRhythm [] diskin2 SRhythm, cent ( kPitch * 10 )
+aRhythm [] diskin2 SNote, cent ( kPitch * 10 )
 
 iChannels lenarray aRhythm
 
@@ -176,7 +198,41 @@ kAmplitude = 1 - kAmplitude
 aLeft clip aLeft * kAmplitude, 1, 1
 aRight clip aRight * kAmplitude, 1, 1
 
-outs aLeft, aRight
+chnmix aLeft, "left"
+chnmix aRight, "right"
+
+endin
+
+-==
+
+?# cat - > .FaddysKit/out.orc
+
++==
+
+instr out
+
+aLeft chnget "left"
+aRight chnget "right"
+
+chnclear "left"
+chnclear "right"
+
+aLeft clip aLeft, 1, 1
+aRight clip aRight, 1, 1
+
+out aLeft/2, aRight/2
+
+endin
+
+-==
+
+?# cat - > .FaddysKit/loop.orc
+
++==
+
+instr loop
+
+rewindscore
 
 endin
 
@@ -184,21 +240,45 @@ endin
 
 #### Node.js Rhythm Scorer ES Module
 
-?# cat - > ._/rhythm.mjs
+?# cat - > .FaddysKit/rhythm.mjs
 
 +==
 
 import Scenarist from '@faddys/scenarist';
 import $0 from '@faddys/command';
 
-await Scenarist ( new class Rhythm {
+await Scenarist ( class Beat {
 
-sequence = []
+score = []
 tempo = 105
 length = 4
 measure = 8
 
-constructor () {
+static async $_producer ( $ ) {
+
+const score = [
+
+//'i "recorder" 0 -1 "RecordingTest"',
+'i "out" 0 -1',
+
+];
+
+const files = process .argv .slice ( 2 );
+
+for ( let index = 0; index < files .length; index++ )
+score .push ( await $ ( files [ index ], index === files .length - 1 )
+.then ( $ => $ ( Symbol .for ( 'score' ) ) ) );
+
+score .unshift ( Object .values ( Beat .kit ) .join ( '\n' ) );
+
+console .log ( score .join ( '\n\n' ) );
+
+}
+
+constructor ( file, loop ) {
+
+this .file = file;
+this .loop = loop;
 
 Object .keys ( this )
 .filter ( key => typeof this [ key ] === 'number' )
@@ -218,28 +298,30 @@ return $ ( ... argv );
 
 async $_producer ( $ ) {
 
-const file = process .argv .slice ( 2 ) .pop ();
-const notation = await $0 ( 'cat', file )
+const beat = this;
+const notation = await $0 ( 'cat', beat .file )
 .then ( $ => $ ( Symbol .for ( 'output' ) ) );
 
 for ( let line of notation )
 if ( ( line = line .trim () ) .length )
 await $ ( ... line .trim () .split ( /\s+/ ) );
 
-const rhythm = this;
+}
 
-console .log ( `
+static tempo = 0
+static length = 0
 
-${ Object .values ( rhythm .kit ) .join ( '\n' ) }
+$_score () {
 
-t 0 ${ rhythm .tempo }
-v ${ rhythm .length }
+const beat = this;
 
-${ rhythm .sequence .join ( '\n' ) }
+Beat .length += ( beat .length *= 60 / beat .tempo );
+Beat .tempo = beat .tempo;
 
-e ${ 60*60*24 }
+if ( beat .loop )
+beat .score .push ( `i "loop" ${ Beat .length } 1` );
 
-` .trim () );
+return beat .score .join ( '\n' );
 
 }
 
@@ -248,38 +330,41 @@ async $_director ( $, ... argv ) {
 if ( ! argv .length )
 return;
 
-const rhythm = this;
+const beat = this;
 const [ step, kit, swing ] = argv .shift () .split ( '/' );
 
-rhythm .sequence .push ( [
+if ( typeof beat .start !== 'number' )
+beat .start = Beat .length * Beat .tempo / beat .tempo;
+
+beat .score .push ( [
 
 'i "rhythm"',
-`[${ step }/${ rhythm .measure }]`,
--1,
+Beat .length + parseFloat ( step ) / beat .measure * beat .length * 60 / beat .tempo,
+0,
 `"${ kit }"`,
 parseFloat ( swing ) || 0
 
 ] .join ( ' ' ) );
 
-await rhythm .prepare ( kit )
+await Beat .prepare ( kit )
 
 await $ ( ... argv );
 
 }
 
-kit = {};
+static kit = {};
 
-async prepare ( kit ) {
+static async prepare ( kit ) {
 
-const rhythm = this;
+const beat = this;
 
-if ( rhythm .kit [ kit ] )
+if ( beat .kit [ kit ] )
 return;
 
 const contents = await $0 ( 'file', '--mime-type', kit + '/*' )
 .then ( $ => $ ( Symbol .for ( 'output' ) ) );
 
-rhythm .kit [ kit ] = contents .map ( line => line .split ( /\s+/ ) )
+beat .kit [ kit ] = contents .map ( line => line .split ( /\s+/ ) )
 .filter ( ( [ file, type ] ) => type .startsWith ( 'audio' ) )
 .map ( ( [ file ] ) => `i "kit" 0 0 "${ kit }" "../${ file .slice ( 0, -1 ) }"` )
 .join ( '\n' );
@@ -290,6 +375,6 @@ rhythm .kit [ kit ] = contents .map ( line => line .split ( /\s+/ ) )
 
 -==
 
-?# $ node ._/rhythm.mjs > ._/index.sco
+?# $ node .FaddysKit/rhythm.mjs > .FaddysKit/index.sco
 
-?# -1 -2 cd ._ ; csound -odac index.* -b 384 -B 1024
+?# cd .FaddysKit ; csound -iadc -odac index.orc index.sco

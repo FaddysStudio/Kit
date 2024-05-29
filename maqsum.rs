@@ -2,9 +2,10 @@
 
 +==
 
+tempo 90
 measure 32
 
-0/clubkick/13
+0/dom/13
 
 2/e/63
 
@@ -22,7 +23,7 @@ measure 32
 
 14/e/63
 
-16/clubkick/23
+16/dom/23
 
 18/e/63
 

@@ -1,0 +1,21 @@
+{
+  "name": "@faddys/kit",
+  "version": "1.0.0",
+  "description": "Faddy's Kit",
+  "type": "module",
+"main": "index.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/FaddysStudio/Kit.git"
+  },
+  "author": "Faddy Michel <faddy.michel@gmail.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/FaddysStudio/Kit/issues"
+  },
+  "homepage": "https://github.com/FaddysStudio/Kit#readme",
+  "dependencies": {
+    "@faddys/command": "^5.2.0",
+    "@faddys/scenarist": "^2.2.0"
+  }
+}
